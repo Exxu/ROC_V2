@@ -1,4 +1,4 @@
-# Robot Control and Integration Repository
+# ROC v2 Control and Integration Repository
 
 This repository contains the configuration files, scripts, and embedded firmware used to integrate the robot control system. The project is organized around three main components:
 
