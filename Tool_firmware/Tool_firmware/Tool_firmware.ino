@@ -1,18 +1,21 @@
 #include <SoftwareSerial.h>
 #include "HilFrameArduino.h"
 
-#define RX_PIN 8   // D8 recibe datos
-#define TX_PIN 7   // D7 transmite datos
-#define TOOL_DOWN_PIN 4   // D7 transmite datos
-#define TOOL_UP_PIN 5   // D7 transmite datos
-#define ID 1
+#define LL_SIGNAL 3        // Low leve tool sensor
+#define HL_SIGNAL 2        // High leve tool sensor
+#define RX_PIN 8           // RX of RS485 transmiter
+#define TX_PIN 7           // TX of RS485 transmiter
+#define TOOL_DOWN_PIN 4    // Move down tool _ Low to activate !!NEVER ACTIVATE BOTH!!
+#define TOOL_UP_PIN 5      // Move up tool _ Low to activate !!NEVER ACTIVATE BOTH!! 
+#define ID 1               // ID of the Tool
+#define CURRENT_SIGNAL A0  //Current sensor 185mV / A
 
 SoftwareSerial rs485Serial(RX_PIN, TX_PIN);
 
 HilFrameArduino<64> rxFrame;
 HilFrameArduino<64> txFrame;
-uint8_t device_id;
-uint8_t command;
+float device_id;
+float command;
 
 void setup() {
   // put your setup code here, to run once:
@@ -32,28 +35,32 @@ void setup() {
 
 void loop() {
   // put your main code here, to run repeatedly:
-  if (rxFrame.readFrom(rs485Serial, 10)) {
+  if (rxFrame.readFrom(rs485Serial, 500)) {
     Serial.print("Frame received. Payload bytes: ");
     Serial.println(rxFrame.size());
 
     rxFrame.resetReadIndex();
 
-    uint8_t device = 0.0;
-    rxFrame.getByte(device);
+    float device = 0.0;
+    rxFrame.getFloat(device);
 
     if (device == device_id) {
 
-      rxFrame.getByte(command);
+      rxFrame.getFloat(command);
       
-      switch (command){
+      switch ((int)command){
         case 1:
-          Serial.print("Command 1");
+          Serial.println("Command 1");
+          break;
         case 2:
-          Serial.print("Command 2");
+          Serial.println("Command 2");
+          break;
         default:
           Serial.print("Command = ");
           Serial.println(command);
       }
+    }else{
+       Serial.print("No ID");
     }
   }
 }

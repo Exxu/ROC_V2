@@ -8,14 +8,15 @@
 
 // Arduino-compatible version of the HIL Frame protocol.
 // Compatible with the PC-side Frame implementation:
-//   header = 0x7E
-//   end    = 0x7E
-//   escape = 0x7D
-//   escaped byte = byte ^ 0x20
-//   checksum = Fletcher-16 mod 255 over raw payload, appended little-endian.
+//   delimiter/header/end = 0x7E
+//   escape               = 0x7D
+//   escaped byte          = byte ^ 0x20
+//   checksum              = Fletcher-16 mod 255 over raw payload
+//   checksum order        = low byte first, high byte second
 //
-// This class avoids std::vector, boost, dynamic allocation, mutexes and other
-// dependencies that are not appropriate for an Arduino Nano / ATmega328P.
+// This class avoids std::vector, boost, dynamic allocation and mutexes.
+// It is intended for Arduino Nano / ATmega328P and Stream-compatible ports:
+// Serial, SoftwareSerial, etc.
 
 template <size_t MAX_PAYLOAD = 64>
 class HilFrameArduino
@@ -70,12 +71,15 @@ public:
     if (input == nullptr && n > 0) {
       return false;
     }
+
     if (n > MAX_PAYLOAD) {
       return false;
     }
+
     if (n > 0) {
       memcpy(data_, input, n);
     }
+
     data_size_ = n;
     read_index_ = 0;
     return true;
@@ -86,6 +90,7 @@ public:
     if (data_size_ + 1 > MAX_PAYLOAD) {
       return false;
     }
+
     data_[data_size_++] = value;
     return true;
   }
@@ -95,6 +100,7 @@ public:
     if (data_size_ + 2 > MAX_PAYLOAD) {
       return false;
     }
+
     data_[data_size_++] = static_cast<uint8_t>(value & 0xFF);
     data_[data_size_++] = static_cast<uint8_t>((value >> 8) & 0xFF);
     return true;
@@ -105,6 +111,7 @@ public:
     if (data_size_ + 4 > MAX_PAYLOAD) {
       return false;
     }
+
     uint32_t u = static_cast<uint32_t>(value);
     data_[data_size_++] = static_cast<uint8_t>(u & 0xFF);
     data_[data_size_++] = static_cast<uint8_t>((u >> 8) & 0xFF);
@@ -118,9 +125,10 @@ public:
     if (data_size_ + 4 > MAX_PAYLOAD) {
       return false;
     }
+
     uint8_t bytes[4];
     memcpy(bytes, &value, 4);
-    // Arduino Nano/ATmega328P is little-endian; keep explicit copy for clarity.
+
     data_[data_size_++] = bytes[0];
     data_[data_size_++] = bytes[1];
     data_[data_size_++] = bytes[2];
@@ -133,13 +141,16 @@ public:
     if (input == nullptr && n > 0) {
       return false;
     }
+
     if (data_size_ + n > MAX_PAYLOAD) {
       return false;
     }
+
     if (n > 0) {
       memcpy(data_ + data_size_, input, n);
       data_size_ += n;
     }
+
     return true;
   }
 
@@ -148,6 +159,7 @@ public:
     if (read_index_ + 1 > data_size_) {
       return false;
     }
+
     value = data_[read_index_++];
     return true;
   }
@@ -157,8 +169,10 @@ public:
     if (read_index_ + 2 > data_size_) {
       return false;
     }
+
     value = static_cast<uint16_t>(data_[read_index_]) |
             (static_cast<uint16_t>(data_[read_index_ + 1]) << 8);
+
     read_index_ += 2;
     return true;
   }
@@ -168,10 +182,12 @@ public:
     if (read_index_ + 4 > data_size_) {
       return false;
     }
+
     uint32_t u = static_cast<uint32_t>(data_[read_index_]) |
                  (static_cast<uint32_t>(data_[read_index_ + 1]) << 8) |
                  (static_cast<uint32_t>(data_[read_index_ + 2]) << 16) |
                  (static_cast<uint32_t>(data_[read_index_ + 3]) << 24);
+
     value = static_cast<int32_t>(u);
     read_index_ += 4;
     return true;
@@ -182,12 +198,14 @@ public:
     if (read_index_ + 4 > data_size_) {
       return false;
     }
+
     uint8_t bytes[4] = {
       data_[read_index_],
       data_[read_index_ + 1],
       data_[read_index_ + 2],
       data_[read_index_ + 3]
     };
+
     memcpy(&value, bytes, 4);
     read_index_ += 4;
     return true;
@@ -240,6 +258,7 @@ public:
     if (!appendEscaped(cksum_low)) {
       return false;
     }
+
     if (!appendEscaped(cksum_high)) {
       return false;
     }
@@ -252,6 +271,7 @@ public:
     if (!build()) {
       return 0;
     }
+
     const size_t written = stream.write(tx_buffer_, tx_size_);
     stream.flush();
     return written;
@@ -270,11 +290,13 @@ public:
 
     while (static_cast<uint32_t>(millis() - start_time) < timeout_ms) {
       if (!stream.available()) {
+        yield();
         continue;
       }
 
       const int raw = stream.read();
       if (raw < 0) {
+        yield();
         continue;
       }
 
@@ -291,9 +313,12 @@ public:
 
       if (escape_next) {
         if (decoded_size >= MAX_DECODED_WITH_CHECKSUM) {
-          clear();
-          return false;
+          in_frame = false;
+          escape_next = false;
+          decoded_size = 0;
+          continue;
         }
+
         decoded[decoded_size++] = static_cast<uint8_t>(byte ^ 0x20);
         escape_next = false;
         continue;
@@ -305,15 +330,27 @@ public:
       }
 
       if (byte == END) {
+        if (decoded_size == 0) {
+          in_frame = true;
+          escape_next = false;
+          decoded_size = 0;
+          continue;
+        }
+
         if (decoded_size < 2) {
-          clear();
-          return false;
+          in_frame = true;
+          escape_next = false;
+          decoded_size = 0;
+          continue;
         }
 
         const size_t payload_size = decoded_size - 2;
+
         if (payload_size > MAX_PAYLOAD) {
-          clear();
-          return false;
+          in_frame = true;
+          escape_next = false;
+          decoded_size = 0;
+          continue;
         }
 
         const uint16_t received_cksum =
@@ -323,22 +360,28 @@ public:
         const uint16_t computed_cksum = checksum(decoded, payload_size);
 
         if (received_cksum != computed_cksum) {
-          clear();
-          return false;
+          in_frame = true;
+          escape_next = false;
+          decoded_size = 0;
+          continue;
         }
 
         if (payload_size > 0) {
           memcpy(data_, decoded, payload_size);
         }
+
         data_size_ = payload_size;
         read_index_ = 0;
         return true;
       }
 
       if (decoded_size >= MAX_DECODED_WITH_CHECKSUM) {
-        clear();
-        return false;
+        in_frame = false;
+        escape_next = false;
+        decoded_size = 0;
+        continue;
       }
+
       decoded[decoded_size++] = byte;
     }
 
@@ -352,6 +395,7 @@ private:
     if (tx_size_ >= MAX_ENCODED) {
       return false;
     }
+
     tx_buffer_[tx_size_++] = byte;
     return true;
   }
@@ -361,6 +405,7 @@ private:
     if (byte == HEADER || byte == END || byte == ESCAPE) {
       return appendTxRaw(ESCAPE) && appendTxRaw(static_cast<uint8_t>(byte ^ 0x20));
     }
+
     return appendTxRaw(byte);
   }
 
