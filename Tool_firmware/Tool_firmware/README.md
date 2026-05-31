@@ -1,122 +1,122 @@
-# Firmware de control de herramienta con Arduino Nano
+# Arduino Nano Tool Controller Firmware
 
-Este `README.md` documenta el firmware de una herramienta accionada por un actuador eléctrico controlado mediante Arduino Nano. La herramienta se comunica con una Raspberry Pi usando un protocolo HIL binario sobre serial/RS485. El Arduino actúa como controlador local y ejecuta las funciones críticas de seguridad.
+This `README.md` documents the firmware for an electrically actuated tool controlled by an Arduino Nano. The tool communicates with a Raspberry Pi using a binary HIL frame protocol over serial/RS485. The Arduino operates as the local controller and handles the critical safety functions.
 
-El sistema fue diseñado para que la Raspberry mande únicamente órdenes de alto nivel, mientras que el Arduino decide localmente si el movimiento es seguro.
-
----
-
-## 1. Objetivo del firmware
-
-El firmware controla una herramienta con dos movimientos:
-
-- subir;
-- bajar.
-
-Además, supervisa:
-
-- sensor superior `HL`;
-- sensor inferior `LL`;
-- corriente del actuador;
-- timeout de movimiento;
-- conflicto de sensores;
-- conflicto de relés del puente H.
-
-El Arduino responde inmediatamente a cada comando con un `ACK` o `NACK`. El estado completo de la herramienta se envía solo cuando el master solicita un `STATUS`.
+The system is designed so that the Raspberry Pi sends only high-level commands, while the Arduino locally decides whether the requested movement is safe.
 
 ---
 
-## 2. Arquitectura de comunicación
+## 1. Firmware objective
 
-La arquitectura es master-slave:
+The firmware controls a tool with two movements:
+
+- move up;
+- move down.
+
+It also supervises:
+
+- upper limit sensor `HL`;
+- lower limit sensor `LL`;
+- actuator current;
+- movement timeout;
+- sensor conflict;
+- relay H-bridge conflict.
+
+The Arduino immediately responds to each command with an `ACK` or `NACK`. The full tool status is sent only when the master requests a `STATUS`.
+
+---
+
+## 2. Communication architecture
+
+The architecture is master-slave:
 
 ```text
 Raspberry Pi / Master
         |
-        | Protocolo HIL sobre serial / RS485
+        | HIL protocol over serial / RS485
         |
 Arduino Nano / Slave
         |
-        |-- Puente H de relés
-        |-- Actuador de herramienta
-        |-- Sensor HL
-        |-- Sensor LL
-        |-- Sensor de corriente
+        |-- Relay H-bridge
+        |-- Tool actuator
+        |-- HL sensor
+        |-- LL sensor
+        |-- Current sensor
 ```
 
-Regla principal de comunicación:
+Main communication rule:
 
 ```text
-El Arduino nunca transmite espontáneamente.
-El Arduino solo responde a una transacción iniciada por la Raspberry.
+The Arduino never transmits spontaneously.
+The Arduino only responds to a transaction initiated by the Raspberry Pi.
 ```
 
-Esto es importante para permitir varias herramientas en el mismo bus RS485 sin colisiones.
+This is important because it allows multiple tools to share the same RS485 bus without collisions.
 
 ---
 
-## 3. Hardware considerado
+## 3. Hardware considered
 
 ### 3.1 Arduino
 
-- Arduino Nano con ATmega328P.
-- Comunicación serial por software usando `PostNeoSWSerial`.
-- Entrada analógica `A0` para sensor de corriente.
-- Interrupciones externas en `D2` y `D3` para sensores `HL` y `LL`.
+- Arduino Nano with ATmega328P.
+- Software serial communication using `PostNeoSWSerial`.
+- Analog input `A0` for the current sensor.
+- External interrupts on `D2` and `D3` for the `HL` and `LL` sensors.
 
-### 3.2 Actuador
+### 3.2 Actuator
 
-El actuador consume aproximadamente:
+The actuator consumes approximately:
 
 ```text
-1 A en operación normal
+1 A during normal operation
 ```
 
-El firmware corta por sobrecorriente en:
+The firmware cuts movement by overcurrent at:
 
 ```text
 1.2 A
 ```
 
-Además, se instaló un fusible de protección de aproximadamente:
+A protection fuse of approximately the following value is also installed:
 
 ```text
 1.5 A
 ```
 
-El fusible es una protección eléctrica final. La protección funcional contra trabamiento se hace por software usando el sensor de corriente.
+The fuse is the final electrical protection. Functional protection against mechanical jamming is performed in software using the current sensor.
 
-### 3.3 Sensores HL y LL
+### 3.3 HL and LL sensors
 
-Se usan sensores inductivos NPN tipo LJ12A3-4-Z/BX:
+The system uses NPN inductive sensors of the LJ12A3-4-Z/BX type:
 
-- `HL`: sensor de límite superior.
-- `LL`: sensor de límite inferior.
+- `HL`: upper limit sensor.
+- `LL`: lower limit sensor.
 
-Como los sensores trabajan con 24 V, su salida no debe conectarse directamente al Arduino. Se usa un divisor resistivo externo. En las pruebas se midió aproximadamente:
+Because these sensors operate at 24 V, their output must not be connected directly to the Arduino. An external resistive voltage divider is used. During testing, the voltage measured at the Arduino input was approximately:
 
 ```text
-salida del divisor hacia Arduino: ~4.6 V
+voltage divider output to Arduino: ~4.6 V
 ```
 
-Por eso los pines se configuran como entrada normal:
+Therefore, the pins are configured as regular inputs:
 
 ```cpp
 pinMode(HL_SIGNAL, INPUT);
 pinMode(LL_SIGNAL, INPUT);
 ```
 
-No se usa `INPUT_PULLUP`.
+`INPUT_PULLUP` is not used.
 
-### 3.4 Sensor de corriente
+### 3.4 Current sensor
 
-Se considera un sensor tipo ACS712 o equivalente con sensibilidad:
+The firmware assumes an ACS712-type current sensor, or an equivalent sensor, with sensitivity:
 
 ```text
 185 mV/A
 ```
 
-En el código:
+In the code:
 
 ```cpp
 #define CURRENT_SENSITIVITY_V_PER_A 0.185f
@@ -124,19 +124,19 @@ En el código:
 
 ---
 
-## 4. Asignación de pines
+## 4. Pin assignment
 
-| Señal | Pin Arduino | Descripción |
+| Signal | Arduino pin | Description |
 |---|---:|---|
-| `HL_SIGNAL` | D2 | Sensor de límite superior, interrupción externa INT0 |
-| `LL_SIGNAL` | D3 | Sensor de límite inferior, interrupción externa INT1 |
-| `TOOL_DOWN_PIN` | D4 | Activación de movimiento hacia abajo |
-| `TOOL_UP_PIN` | D5 | Activación de movimiento hacia arriba |
-| `TX_PIN` | D7 | TX serial hacia Raspberry / módulo RS485 |
-| `RX_PIN` | D8 | RX serial desde Raspberry / módulo RS485 |
-| `CURRENT_SIGNAL` | A0 | Entrada analógica del sensor de corriente |
+| `HL_SIGNAL` | D2 | Upper limit sensor, external interrupt INT0 |
+| `LL_SIGNAL` | D3 | Lower limit sensor, external interrupt INT1 |
+| `TOOL_DOWN_PIN` | D4 | Down movement activation |
+| `TOOL_UP_PIN` | D5 | Up movement activation |
+| `TX_PIN` | D7 | Serial TX to Raspberry Pi / RS485 module |
+| `RX_PIN` | D8 | Serial RX from Raspberry Pi / RS485 module |
+| `CURRENT_SIGNAL` | A0 | Current sensor analog input |
 
-Definición usada:
+Definitions used in the firmware:
 
 ```cpp
 #define LL_SIGNAL 3
@@ -152,36 +152,36 @@ Definición usada:
 
 ---
 
-## 5. Lógica de sensores
+## 5. Sensor logic
 
-Los sensores NPN activos en bajo se interpretan así:
+The NPN sensors are active-low:
 
 ```text
-LOW  -> sensor activo
-HIGH -> sensor inactivo
+LOW  -> sensor active
+HIGH -> sensor inactive
 ```
 
-En el firmware:
+In the firmware:
 
 ```cpp
 #define SENSOR_ACTIVE_LEVEL LOW
 ```
 
-Por lo tanto:
+Therefore:
 
 ```text
-HL activo -> herramienta arriba
-LL activo -> herramienta abajo
+HL active -> tool is at the upper position
+LL active -> tool is at the lower position
 ```
 
-Los sensores se actualizan mediante interrupciones:
+The sensor states are updated using external interrupts:
 
 ```cpp
 attachInterrupt(digitalPinToInterrupt(HL_SIGNAL), onHLChange, CHANGE);
 attachInterrupt(digitalPinToInterrupt(LL_SIGNAL), onLLChange, CHANGE);
 ```
 
-Las ISR solo actualizan variables globales:
+The interrupt service routines only update global state variables:
 
 ```cpp
 void onHLChange()
@@ -195,60 +195,60 @@ void onLLChange()
 }
 ```
 
-No se ejecuta lógica de movimiento dentro de las interrupciones.
+No movement logic is executed inside the interrupt routines.
 
 ---
 
-## 6. Control seguro del puente H de relés
+## 6. Safe control of the relay H-bridge
 
-El módulo de relés es activo en bajo:
+The relay module is active-low:
 
 ```cpp
 #define RELAY_ACTIVE_LEVEL LOW
 #define RELAY_INACTIVE_LEVEL HIGH
 ```
 
-Por tanto:
+Therefore:
 
 ```text
-LOW  -> relé activo
-HIGH -> relé inactivo
+LOW  -> relay active
+HIGH -> relay inactive
 ```
 
-Restricción crítica:
+Critical restriction:
 
 ```text
-TOOL_UP_PIN y TOOL_DOWN_PIN nunca pueden estar en LOW al mismo tiempo.
+TOOL_UP_PIN and TOOL_DOWN_PIN must never be LOW at the same time.
 ```
 
-Esto podría provocar un cortocircuito en el puente H.
+Activating both directions at the same time could create a short circuit in the relay H-bridge.
 
-Por eso el firmware no activa los pines directamente desde la lógica principal. Toda activación pasa por funciones seguras:
+For this reason, the firmware does not directly activate the output pins from the main logic. Every activation goes through safe functions:
 
 ```cpp
 bool activateUpRelaySafely();
 bool activateDownRelaySafely();
 ```
 
-Para subir:
+For moving up:
 
 ```text
-1. Desactivar DOWN: TOOL_DOWN_PIN = HIGH
-2. Verificar que DOWN está inactivo
-3. Activar UP: TOOL_UP_PIN = LOW
-4. Verificar que no estén ambos activos
+1. Deactivate DOWN: TOOL_DOWN_PIN = HIGH
+2. Verify that DOWN is inactive
+3. Activate UP: TOOL_UP_PIN = LOW
+4. Verify that both relays are not active at the same time
 ```
 
-Para bajar:
+For moving down:
 
 ```text
-1. Desactivar UP: TOOL_UP_PIN = HIGH
-2. Verificar que UP está inactivo
-3. Activar DOWN: TOOL_DOWN_PIN = LOW
-4. Verificar que no estén ambos activos
+1. Deactivate UP: TOOL_UP_PIN = HIGH
+2. Verify that UP is inactive
+3. Activate DOWN: TOOL_DOWN_PIN = LOW
+4. Verify that both relays are not active at the same time
 ```
 
-Además, en cada ciclo de control se verifica:
+In addition, every control cycle verifies:
 
 ```cpp
 if (areBothRelaysActive()) {
@@ -259,9 +259,9 @@ if (areBothRelaysActive()) {
 
 ---
 
-## 7. Parámetros fijos por herramienta
+## 7. Fixed tool parameters
 
-Estos parámetros no se reciben desde la Raspberry. Son propios del actuador y de la herramienta:
+These parameters are not received from the Raspberry Pi. They are local safety parameters of the actuator and the tool:
 
 ```cpp
 #define MOVEMENT_TIMEOUT_UP_MS    5000UL
@@ -275,7 +275,7 @@ Estos parámetros no se reciben desde la Raspberry. Son propios del actuador y d
 
 ### 7.1 Timeout
 
-Si la herramienta no alcanza su sensor final dentro del tiempo máximo, se genera una falla:
+If the tool does not reach its target limit sensor within the maximum allowed time, the firmware raises one of the following faults:
 
 ```text
 FAULT_TIMEOUT_UP
@@ -284,61 +284,61 @@ FAULT_TIMEOUT_DOWN
 
 ### 7.2 Dead time
 
-Antes de cambiar o activar dirección se espera:
+Before changing or activating direction, the firmware waits:
 
 ```text
 100 ms
 ```
 
-Esto reduce el riesgo de conmutación simultánea de relés.
+This reduces the risk of simultaneous relay commutation.
 
-### 7.3 Límite de corriente
+### 7.3 Current limit
 
-El corte por sobrecorriente está configurado en:
+The overcurrent cut-off is configured as:
 
 ```text
 1.2 A
 ```
 
-El filtro evita disparos falsos por ruido.
+The current filter avoids false trips caused by noise.
 
 ---
 
-## 8. Lectura de corriente
+## 8. Current measurement
 
-La lectura de corriente se realiza en `A0` mediante el ADC del ATmega328P.
+Current is measured on `A0` using the ATmega328P ADC.
 
-El ADC usa como referencia `AVcc`:
+The ADC uses `AVcc` as reference:
 
 ```cpp
 #define ADC_REF_VOLTAGE 5.0f
 ```
 
-La conversión de ADC a voltaje se hace como:
+The ADC-to-voltage conversion is:
 
 ```cpp
 voltage = raw * ADC_REF_VOLTAGE / 1023.0f;
 ```
 
-La corriente se calcula como:
+The current is calculated as:
 
 ```cpp
 current = abs((voltage - currentZeroVoltage) / CURRENT_SENSITIVITY_V_PER_A);
 ```
 
-### 8.1 Calibración de cero
+### 8.1 Zero calibration
 
-Al iniciar, con el motor detenido, se mide el voltaje de reposo del sensor:
+During startup, with the motor stopped, the firmware measures the resting voltage of the current sensor:
 
 ```cpp
 currentZeroVoltage = calibrateCurrentZeroVoltage();
 ```
 
-Esto compensa el offset del sensor de corriente.
+This compensates the current sensor offset.
 
-### 8.2 ADC por interrupción
+### 8.2 ADC interrupt
 
-La ISR del ADC solo guarda la muestra cruda:
+The ADC interrupt service routine only stores the raw sample:
 
 ```cpp
 ISR(ADC_vect)
@@ -348,11 +348,11 @@ ISR(ADC_vect)
 }
 ```
 
-El cálculo en amperios y el filtro se hacen fuera de la interrupción.
+The conversion to amperes and the current filter are executed outside the interrupt routine.
 
-### 8.3 Filtro de corriente
+### 8.3 Current filter
 
-Se usa un filtro exponencial:
+The firmware uses an exponential filter:
 
 ```cpp
 filteredCurrentA =
@@ -360,7 +360,7 @@ filteredCurrentA =
   CURRENT_FILTER_ALPHA * current;
 ```
 
-La protección por sobrecorriente usa solo la corriente filtrada:
+The overcurrent protection uses only the filtered current:
 
 ```cpp
 return filteredCurrentA > CURRENT_LIMIT_A;
@@ -368,77 +368,77 @@ return filteredCurrentA > CURRENT_LIMIT_A;
 
 ---
 
-## 9. Comunicación serial
+## 9. Serial communication
 
-Se usa:
+The firmware uses:
 
 ```cpp
 #include <PostNeoSWSerial.h>
 ```
 
-Instancia:
+Instance:
 
 ```cpp
 PostNeoSWSerial rs485Serial(RX_PIN, TX_PIN);
 ```
 
-Velocidad:
+Baud rate:
 
 ```cpp
 rs485Serial.begin(9600);
 ```
 
-`PostNeoSWSerial` se usa para mejorar la convivencia con interrupciones respecto a `SoftwareSerial`, ya que el firmware también usa:
+`PostNeoSWSerial` is used to improve coexistence with interrupts compared with `SoftwareSerial`, because the firmware also uses:
 
-- interrupciones externas para sensores;
-- interrupción del ADC;
-- comunicación serial por software.
+- external interrupts for sensors;
+- ADC interrupt;
+- software serial communication.
 
 ---
 
-## 10. Protocolo HIL
+## 10. HIL protocol
 
-El firmware usa:
+The firmware uses:
 
 ```cpp
 #include "HilFrameArduino.h"
 ```
 
-Frames usados:
+Frames used by the firmware:
 
 ```cpp
 HilFrameArduino<64> rxFrame;
 HilFrameArduino<64> txFrame;
 ```
 
-La comunicación se basa en `float`.
+The communication payload is based on `float` values.
 
-### 10.1 Comando recibido por Arduino
+### 10.1 Command received by the Arduino
 
-Formato:
+Format:
 
 ```text
 float[0] = device_id
 float[1] = command
 ```
 
-Comandos:
+Commands:
 
-| Código | Nombre | Descripción |
+| Code | Name | Description |
 |---:|---|---|
-| 0 | `CMD_STOP` | Detiene la herramienta |
-| 1 | `CMD_UP` | Solicita subir |
-| 2 | `CMD_DOWN` | Solicita bajar |
-| 3 | `CMD_RESET_FAULT` | Limpia falla |
-| 4 | `CMD_STATUS_REQUEST` | Solicita status |
+| 0 | `CMD_STOP` | Stop the tool |
+| 1 | `CMD_UP` | Request upward movement |
+| 2 | `CMD_DOWN` | Request downward movement |
+| 3 | `CMD_RESET_FAULT` | Clear active fault |
+| 4 | `CMD_STATUS_REQUEST` | Request tool status |
 
 ---
 
-## 11. Respuesta ACK
+## 11. ACK response
 
-Para todos los comandos excepto `CMD_STATUS_REQUEST`, el Arduino responde inmediatamente con un ACK.
+For every command except `CMD_STATUS_REQUEST`, the Arduino immediately responds with an ACK frame.
 
-Formato:
+Format:
 
 ```text
 float[0] = device_id
@@ -447,31 +447,31 @@ float[2] = command
 float[3] = result_code
 ```
 
-Resultados:
+Results:
 
-| Código | Resultado | Descripción |
+| Code | Result | Description |
 |---:|---|---|
-| 0 | `RESULT_OK` | Comando aceptado |
-| 1 | `RESULT_REJECTED_FAULT` | Herramienta en falla |
-| 2 | `RESULT_REJECTED_AT_TOP` | Ya está arriba |
-| 3 | `RESULT_REJECTED_AT_BOTTOM` | Ya está abajo |
-| 4 | `RESULT_INVALID_COMMAND` | Comando inválido |
-| 5 | `RESULT_ALREADY_MOVING` | Ya está moviéndose |
-| 6 | `RESULT_REJECTED_SENSOR_CONFLICT` | Conflicto de sensores |
+| 0 | `RESULT_OK` | Command accepted |
+| 1 | `RESULT_REJECTED_FAULT` | Tool is in fault state |
+| 2 | `RESULT_REJECTED_AT_TOP` | Tool is already at the upper limit |
+| 3 | `RESULT_REJECTED_AT_BOTTOM` | Tool is already at the lower limit |
+| 4 | `RESULT_INVALID_COMMAND` | Invalid command |
+| 5 | `RESULT_ALREADY_MOVING` | Tool is already moving |
+| 6 | `RESULT_REJECTED_SENSOR_CONFLICT` | Sensor conflict detected |
 
-`RESULT_OK` significa que el comando fue aceptado, no que el movimiento terminó.
+`RESULT_OK` means that the command was accepted. It does not mean that the movement has finished.
 
 ---
 
-## 12. Respuesta STATUS
+## 12. STATUS response
 
-El status se envía solo cuando el master manda:
+The status is sent only when the master sends:
 
 ```text
 CMD_STATUS_REQUEST
 ```
 
-Formato:
+Format:
 
 ```text
 float[0] = device_id
@@ -483,66 +483,66 @@ float[5] = LL_active
 float[6] = filtered_current_A
 ```
 
-Estados públicos:
+Public tool states:
 
-| Código | Estado | Descripción |
+| Code | State | Description |
 |---:|---|---|
-| 0 | `STATUS_UNKNOWN` | Estado desconocido |
-| 1 | `STATUS_AT_BOTTOM` | Herramienta abajo |
-| 2 | `STATUS_AT_TOP` | Herramienta arriba |
-| 3 | `STATUS_MOVING_UP` | Subiendo |
-| 4 | `STATUS_MOVING_DOWN` | Bajando |
-| 5 | `STATUS_STOPPED_BETWEEN_LIMITS` | Parada entre límites |
-| 6 | `STATUS_FAULT` | Herramienta en falla |
+| 0 | `STATUS_UNKNOWN` | Unknown state |
+| 1 | `STATUS_AT_BOTTOM` | Tool is at the lower position |
+| 2 | `STATUS_AT_TOP` | Tool is at the upper position |
+| 3 | `STATUS_MOVING_UP` | Tool is moving up |
+| 4 | `STATUS_MOVING_DOWN` | Tool is moving down |
+| 5 | `STATUS_STOPPED_BETWEEN_LIMITS` | Tool is stopped between limits |
+| 6 | `STATUS_FAULT` | Tool is in fault state |
 
 ---
 
-## 13. Fallas
+## 13. Faults
 
-| Código | Falla | Descripción |
+| Code | Fault | Description |
 |---:|---|---|
-| 0 | `FAULT_NONE` | Sin falla |
-| 1 | `FAULT_TIMEOUT_UP` | Timeout al subir |
-| 2 | `FAULT_TIMEOUT_DOWN` | Timeout al bajar |
-| 3 | `FAULT_OVERCURRENT_UP` | Sobrecorriente al subir |
-| 4 | `FAULT_OVERCURRENT_DOWN` | Sobrecorriente al bajar |
-| 5 | `FAULT_RELAY_CONFLICT` | UP y DOWN activos simultáneamente |
-| 6 | `FAULT_SENSOR_CONFLICT` | HL y LL activos simultáneamente |
+| 0 | `FAULT_NONE` | No fault |
+| 1 | `FAULT_TIMEOUT_UP` | Timeout while moving up |
+| 2 | `FAULT_TIMEOUT_DOWN` | Timeout while moving down |
+| 3 | `FAULT_OVERCURRENT_UP` | Overcurrent while moving up |
+| 4 | `FAULT_OVERCURRENT_DOWN` | Overcurrent while moving down |
+| 5 | `FAULT_RELAY_CONFLICT` | UP and DOWN active simultaneously |
+| 6 | `FAULT_SENSOR_CONFLICT` | HL and LL active simultaneously |
 
 ---
 
-## 14. Flujo recomendado desde Raspberry
+## 14. Recommended Raspberry Pi flow
 
-### Subir
+### Move up
 
 ```text
 1. Master -> Arduino: ID, CMD_UP
 2. Arduino -> Master: ID, RESPONSE_ACK, CMD_UP, RESULT_OK
-3. Master espera 100 ms o 200 ms
+3. Master waits 100 ms or 200 ms
 4. Master -> Arduino: ID, CMD_STATUS_REQUEST
-5. Arduino -> Master: STATUS_MOVING_UP o STATUS_AT_TOP
+5. Arduino -> Master: STATUS_MOVING_UP or STATUS_AT_TOP
 ```
 
-### Bajar
+### Move down
 
 ```text
 1. Master -> Arduino: ID, CMD_DOWN
 2. Arduino -> Master: ID, RESPONSE_ACK, CMD_DOWN, RESULT_OK
-3. Master espera 100 ms o 200 ms
+3. Master waits 100 ms or 200 ms
 4. Master -> Arduino: ID, CMD_STATUS_REQUEST
-5. Arduino -> Master: STATUS_MOVING_DOWN o STATUS_AT_BOTTOM
+5. Arduino -> Master: STATUS_MOVING_DOWN or STATUS_AT_BOTTOM
 ```
 
-### Falla
+### Fault
 
-Si ocurre una falla:
+If a fault occurs:
 
 ```text
 tool_status = STATUS_FAULT
-fault_code  = código de falla
+fault_code  = fault code
 ```
 
-Para salir de falla:
+To clear the fault:
 
 ```text
 Master -> Arduino: ID, CMD_RESET_FAULT
@@ -550,9 +550,9 @@ Master -> Arduino: ID, CMD_RESET_FAULT
 
 ---
 
-## 15. Ejemplos de comandos desde Raspberry
+## 15. Raspberry Pi command examples
 
-### Subir
+### Move up
 
 ```cpp
 Frame request;
@@ -561,7 +561,7 @@ request.addFloat(1.0f);  // CMD_UP
 hilSerial->sendFrame(request);
 ```
 
-### Bajar
+### Move down
 
 ```cpp
 Frame request;
@@ -570,7 +570,7 @@ request.addFloat(2.0f);  // CMD_DOWN
 hilSerial->sendFrame(request);
 ```
 
-### Detener
+### Stop
 
 ```cpp
 Frame request;
@@ -579,7 +579,7 @@ request.addFloat(0.0f);  // CMD_STOP
 hilSerial->sendFrame(request);
 ```
 
-### Resetear falla
+### Reset fault
 
 ```cpp
 Frame request;
@@ -588,7 +588,7 @@ request.addFloat(3.0f);  // CMD_RESET_FAULT
 hilSerial->sendFrame(request);
 ```
 
-### Solicitar status
+### Request status
 
 ```cpp
 Frame request;
@@ -599,84 +599,84 @@ hilSerial->sendFrame(request);
 
 ---
 
-## 16. Archivos del firmware
+## 16. Firmware files
 
-El firmware principal está en:
+The main firmware file is:
 
 ```text
 ToolController.ino
 ```
 
-El firmware depende de:
+The firmware depends on:
 
 ```text
 HilFrameArduino.h
 PostNeoSWSerial
 ```
 
-`HilFrameArduino.h` implementa la lectura y escritura de frames HIL binarios. `PostNeoSWSerial` implementa la comunicación serial por software en los pines definidos.
+`HilFrameArduino.h` implements binary HIL frame reading and writing. `PostNeoSWSerial` implements software serial communication on the configured pins.
 
 ---
 
-## 17. Seguridad recomendada
+## 17. Recommended safety measures
 
-El software no reemplaza las protecciones físicas. Se recomienda:
+Software does not replace physical protection. The following protections are recommended:
 
-- fusible en serie con la alimentación del actuador;
-- fuente con límite de corriente;
-- cables dimensionados para la corriente máxima;
-- protección contra inversión de polaridad;
-- diodos flyback o módulo de relés con protección;
-- enclavamiento eléctrico físico entre relés si es posible;
-- verificación con multímetro de que D2 y D3 nunca reciben más de 5 V;
-- pruebas iniciales sin carga mecánica;
-- pruebas con fuente limitada en corriente.
+- fuse in series with the actuator power supply;
+- current-limited power supply;
+- wires sized for the maximum expected current;
+- reverse polarity protection;
+- flyback diodes or a relay module with coil protection;
+- physical/electrical interlock between relays if possible;
+- verification with a multimeter that D2 and D3 never receive more than 5 V;
+- initial tests without mechanical load;
+- tests using a current-limited supply.
 
 ---
 
-## 18. Checklist de pruebas
+## 18. Test checklist
 
 ```text
-[ ] Verificar que HL y LL llegan al Arduino con máximo 5 V.
-[ ] Confirmar que HL activo se lee como LOW.
-[ ] Confirmar que LL activo se lee como LOW.
-[ ] Confirmar que los relés están inactivos al energizar el Arduino.
-[ ] Confirmar que UP y DOWN nunca se activan simultáneamente.
-[ ] Verificar comunicación HIL con STATUS_REQUEST.
-[ ] Verificar ACK para STOP, UP, DOWN y RESET_FAULT.
-[ ] Probar movimiento sin carga.
-[ ] Probar parada por HL.
-[ ] Probar parada por LL.
-[ ] Probar timeout desconectando temporalmente el sensor correspondiente.
-[ ] Probar sobrecorriente con un umbral bajo en banco.
-[ ] Confirmar que el fusible está en serie con la alimentación del actuador.
+[ ] Verify that HL and LL reach the Arduino with a maximum of 5 V.
+[ ] Confirm that active HL is read as LOW.
+[ ] Confirm that active LL is read as LOW.
+[ ] Confirm that relays are inactive when the Arduino is powered.
+[ ] Confirm that UP and DOWN never activate simultaneously.
+[ ] Verify HIL communication using STATUS_REQUEST.
+[ ] Verify ACK for STOP, UP, DOWN, and RESET_FAULT.
+[ ] Test movement without load.
+[ ] Test stopping by HL.
+[ ] Test stopping by LL.
+[ ] Test timeout by temporarily disconnecting the corresponding limit sensor.
+[ ] Test overcurrent with a low threshold during bench testing.
+[ ] Confirm that the fuse is in series with the actuator power supply.
 ```
 
 ---
 
-## 19. Resumen del protocolo final
+## 19. Final protocol summary
 
-Entrada al Arduino:
+Input to Arduino:
 
 ```text
 ID, COMMAND
 ```
 
-Salida ACK:
+ACK output:
 
 ```text
 ID, RESPONSE_ACK, COMMAND, RESULT_CODE
 ```
 
-Salida STATUS:
+STATUS output:
 
 ```text
 ID, RESPONSE_STATUS, TOOL_STATUS, FAULT_CODE, HL_ACTIVE, LL_ACTIVE, FILTERED_CURRENT_A
 ```
 
-Principio de comunicación:
+Communication principle:
 
 ```text
-El Arduino nunca transmite espontáneamente.
-Solo responde a una solicitud iniciada por la Raspberry.
+The Arduino never transmits spontaneously.
+It only responds to a request initiated by the Raspberry Pi.
 ```
