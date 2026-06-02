@@ -1,0 +1,38 @@
+<?xml version="1.0"?>
+<!--
+This file is part of the ProVANT simulator project.
+Licensed under the terms of the MIT open source license. More details at
+https://github.com/Guiraffo/ProVANT-Simulator/blob/master/LICENSE.md
+-->
+<package format="2">
+  <name>hil_communication</name>
+  <version>0.0.1</version>
+  <description>
+    HIL communication library with framed serial and UDP transports.
+  </description>
+
+  <maintainer email="ra.andrade.alfaro@gmail.com">Richard Andrade</maintainer>
+  
+  <license>MIT</license>
+
+  <url type="website">http://provant.eng.ufmg.br/provantsimulator</url>
+  <url type="repository">https://github.com/Guiraffo/ProVANT-Simulator.git</url>
+  <url type="bugtracker">https://github.com/Guiraffo/ProVANT-Simulator/issues</url>
+
+  <author email="ra.andrade.alfaro@gmail.com">Richard Andrade</author>
+  <author email="avlara@hotmail.com">Arthur Viana Lara</author>
+  <author email="jeduardo@ufmg.br">Júnio Eduardo de Morais Aquino</author>
+
+  <buildtool_depend>catkin</buildtool_depend>
+
+  <build_depend>roscpp</build_depend>
+  <build_export_depend>roscpp</build_export_depend>
+  <exec_depend>roscpp</exec_depend>
+
+  <build_depend>boost</build_depend>
+  <build_export_depend>boost</build_export_depend>
+  <exec_depend>boost</exec_depend>
+
+  <export>
+  </export>
+</package>

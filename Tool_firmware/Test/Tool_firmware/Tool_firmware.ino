@@ -42,7 +42,7 @@
 #define DIRECTION_DEAD_TIME_MS 100UL
 
 // Current protection
-#define CURRENT_LIMIT_A 1.2f
+#define CURRENT_LIMIT_A 1.5f
 #define CURRENT_IGNORE_TIME_MS 50UL
 #define CURRENT_SAMPLE_PERIOD_MS 10UL
 #define CURRENT_FILTER_ALPHA 0.2f
@@ -52,7 +52,10 @@
 #define CURRENT_SENSITIVITY_V_PER_A 0.185f
 
 // Serial frame timeout
-#define SERIAL_FRAME_TIMEOUT_MS 25UL
+#define SERIAL_FRAME_TIMEOUT_MS 100UL
+
+// Delay to send ACK
+#define RS485_ACK_DELAY_MS 100
 
 // ============================================================
 // Protocol definitions
@@ -401,6 +404,10 @@ ToolPublicStatus getToolPublicStatus()
 
 void sendAck(float command, CommandResult result)
 {
+  Serial.println("Sending ACK");
+
+  delay(RS485_ACK_DELAY_MS);
+  
   txFrame.clear();
 
   txFrame.addFloat((float)ID);
@@ -657,8 +664,8 @@ void processCommandFrame()
     return;
   }
 
-  Serial.print("Command = ");
-  Serial.println(command);
+  //Serial.print("Command = ");
+  //Serial.println(command);
 
   switch ((int)command) {
     case CMD_STOP:
@@ -734,8 +741,8 @@ void setup()
   Serial.println(currentZeroVoltage, 3);
 
   // Enable ADC interrupt-based measurement after calibration.
-  setupCurrentAdcInterrupt();
-  requestCurrentAdcConversion();
+  //setupCurrentAdcInterrupt();
+  //requestCurrentAdcConversion();
 
   Serial.print("Initial HL = ");
   Serial.println(isHLActive());
@@ -749,12 +756,11 @@ void setup()
 void loop()
 {
   if (rxFrame.readFrom(rs485Serial, SERIAL_FRAME_TIMEOUT_MS)) {
-    Serial.print("Frame received. Payload bytes: ");
-    Serial.println(rxFrame.size());
+    Serial.println("Frame received");
 
     processCommandFrame();
   }
 
-  updateCurrentMeasurement();
+  //updateCurrentMeasurement();
   updateTool();
 }
