@@ -11,8 +11,8 @@
 #define RX_PIN 8           // RX from Raspberry / RS485
 #define TX_PIN 7           // TX to Raspberry / RS485
 
-#define TOOL_DOWN_PIN 4    // Move down - LOW to activate
-#define TOOL_UP_PIN 5      // Move up   - LOW to activate
+#define TOOL_DOWN_PIN 5    // Move down - LOW to activate
+#define TOOL_UP_PIN 4      // Move up   - LOW to activate
 
 #define CURRENT_SIGNAL A0  // Current sensor ACS712-5A, 185 mV/A
 
@@ -33,7 +33,7 @@
 #define RELAY_INACTIVE_LEVEL HIGH
 
 #define MOVEMENT_TIMEOUT_MS 5000UL
-#define CHECK_PERIOD_MS 100UL
+#define CHECK_PERIOD_MS 200UL
 #define DIRECTION_DEAD_TIME_MS 100UL
 
 #define RS485_ACK_DELAY_MS 50UL
@@ -42,7 +42,7 @@
 // Current sensor configuration
 #define ADC_REF_VOLTAGE 5.0f
 #define CURRENT_SENSITIVITY_V_PER_A 0.185f
-#define CURRENT_LIMIT_A 1.2f
+#define CURRENT_LIMIT_A 3.5f
 
 // ============================================================
 // Protocol
@@ -386,7 +386,7 @@ void processCommandFrame()
 
       // Small pause after ACK before activating relays.
       delay(50);
-
+      
       moveDownSimple();
       break;
     
