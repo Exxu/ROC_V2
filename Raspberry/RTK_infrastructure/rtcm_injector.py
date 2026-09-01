@@ -3,9 +3,9 @@ import serial
 import time
 
 # LoRa por UART GPIO
-lora = serial.Serial('/dev/ttyAMA0', 38400, timeout=0.1)
+lora = serial.Serial('/dev/ttyUSB0', 38400, timeout=0.1)
 
-# Conectar al router (NO a /dev/ttyACM0)
+# Conectar al router (NO a /dev/ttyUSB0)
 mav = mavutil.mavlink_connection('udpout:127.0.0.1:14540')
 
 seq = 0
