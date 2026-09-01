@@ -1,0 +1,4 @@
+[submodule "ArduPilot_ROC"]
+	path = ArduPilot_ROC
+	url = https://github.com/Exxu/ardupilot.git
+	branch = Rover-4.6.3-MOT_REV_DELAY
