@@ -1,0 +1,14 @@
+[Unit]
+Description=ROC additional modules launcher
+After=network-online.target mavlink-router.service
+Wants=network-online.target
+Requires=mavlink-router.service
+
+[Service]
+Type=oneshot
+User=roc
+ExecStart=/home/roc/ROC_V2/ROC_Script/roc_start.sh
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target
